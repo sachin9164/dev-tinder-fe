@@ -10,7 +10,20 @@ import { Input } from '../components/ui/input';
 import { ScrollArea } from '../components/ui/scroll-area';
 import { cn } from '../lib/utils';
 import { getConnections } from '../services/user-service';
+import { getChatByUserId } from '../services/chat-service';
 import { parseApiError } from '../lib/api-client';
+import { connectSocket, disconnectSocket, getSocket } from '../lib/socket-client';
+import { useAuth } from '../hooks/use-auth';
+
+const JOIN_CHAT_EVENT =
+  import.meta.env.VITE_SOCKET_JOIN_EVENT || 'chat:join';
+
+const OUTGOING_MESSAGE_EVENT =
+  import.meta.env.VITE_SOCKET_SEND_MESSAGE_EVENT || 'chat:message:send';
+
+const INCOMING_MESSAGE_EVENT =
+  import.meta.env.VITE_SOCKET_RECEIVE_MESSAGE_EVENT || 'chat:receiveMessage';
+
 
 function formatName(user) {
   return `${user?.firstName || user?.firstname || ''} ${user?.lastName || user?.lastname || ''}`.trim();
@@ -28,7 +41,30 @@ function getMatchId(match, fallbackIndex = 0) {
   return match?._id || `match-${fallbackIndex}`;
 }
 
+function extractFirstName(value = '') {
+  return String(value).trim().split(' ')[0] || '';
+}
+
+function getSenderId(sender) {
+  if (!sender) return '';
+  return sender._id || sender.id || sender;
+}
+
+function normalizeStoredMessage(message, currentUserId) {
+  const sender = message?.senderID;
+  const senderId = getSenderId(sender);
+
+  return {
+    id: message?._id || `${senderId}-${message?.createdAt || Date.now()}`,
+    from: String(senderId) === String(currentUserId) ? 'me' : 'them',
+    firstName: sender?.firstName || sender?.firstname || '',
+    text: message?.content || message?.message || message?.text || '',
+    createdAt: message?.createdAt || new Date().toISOString(),
+  };
+}
+
 export function MatchesPage() {
+  const { user } = useAuth();
   const [matches, setMatches] = useState([]);
   const [activeMatchId, setActiveMatchId] = useState('');
   const [draftMessage, setDraftMessage] = useState('');
@@ -50,18 +86,7 @@ export function MatchesPage() {
         setMessagesByMatch((prev) =>
           nextMatches.reduce((acc, match, index) => {
             const id = getMatchId(match, index);
-            const existingMessages = prev[id];
-
-            acc[id] =
-              existingMessages ||
-              [
-                {
-                  id: `seed-${id}`,
-                  from: 'them',
-                  text: `Hey! This chat UI is ready for ${formatName(match) || 'your match'}.`,
-                  createdAt: new Date().toISOString(),
-                },
-              ];
+            acc[id] = prev[id] || [];
 
             return acc;
           }, {})
@@ -75,6 +100,102 @@ export function MatchesPage() {
 
     loadMatches();
   }, []);
+
+
+  useEffect(() => {
+    const userId = user?._id || user?.id;
+    if (!userId) return;
+
+    const socket = connectSocket({ userId });
+
+    function handleConnect() {
+      setError('');
+    }
+
+    function handleIncomingMessage(payload = {}) {
+      const senderId = payload.fromUserId || payload.senderId || payload.userId || payload.from;
+      const targetId = payload.toUserId || payload.to;
+      const partnerId = senderId === userId ? targetId : senderId;
+      const messageText = payload.message || payload.text;
+
+      if (!partnerId || !messageText) return;
+
+      setMessagesByMatch((prev) => ({
+        ...prev,
+        [partnerId]: [
+          ...(prev[partnerId] || []),
+          {
+            id: payload.id || `${partnerId}-${Date.now()}`,
+            from: senderId === userId ? 'me' : 'them',
+            firstName: payload.firstname || payload.firstName || '',
+            text: messageText,
+            createdAt: payload.createdAt || new Date().toISOString(),
+          },
+        ],
+      }));
+    }
+
+    function handleConnectError(connectionError) {
+      setError(connectionError?.message || 'Socket connection failed');
+    }
+
+    socket.on('connect', handleConnect);
+    socket.on(INCOMING_MESSAGE_EVENT, handleIncomingMessage);
+    socket.on('connect_error', handleConnectError);
+
+    return () => {
+      socket.off('connect', handleConnect);
+      socket.off(INCOMING_MESSAGE_EVENT, handleIncomingMessage);
+      socket.off('connect_error', handleConnectError);
+      disconnectSocket();
+    };
+  }, [ user , activeMatchId]);
+
+  useEffect(() => {
+    const userId = user?._id || user?.id;
+    if (!activeMatchId || !userId) return;
+
+    let isCancelled = false;
+
+    async function loadChatHistory() {
+      try {
+        const chat = await getChatByUserId(activeMatchId);
+        if (isCancelled) return;
+
+        const nextMessages = Array.isArray(chat?.messages)
+          ? chat.messages
+              .map((message) => normalizeStoredMessage(message, userId))
+              .filter((message) => message.text)
+          : [];
+
+        setMessagesByMatch((prev) => ({
+          ...prev,
+          [activeMatchId]: nextMessages,
+        }));
+      } catch (requestError) {
+        if (!isCancelled) {
+          setError(parseApiError(requestError));
+        }
+      }
+    }
+
+    loadChatHistory();
+
+    const socket = getSocket();
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    socket.emit(JOIN_CHAT_EVENT, {
+      userId,
+      targetUserId: activeMatchId,
+      toUserId: activeMatchId,
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeMatchId, user]);
 
   if (loading) {
     return <LoadingState text="Finding your matches..." />;
@@ -90,10 +211,25 @@ export function MatchesPage() {
 
     if (!draftMessage.trim() || !activeMatchId) return;
 
+    const trimmedMessage = draftMessage.trim();
+
+    const socket = getSocket();
+    if (!socket.connected) {
+      socket.connect();
+    }
+
+    socket.emit(OUTGOING_MESSAGE_EVENT, {
+      firstname: user?.firstName,
+      userId: user?._id || user?.id,
+      toUserId: activeMatchId,
+      message: trimmedMessage,
+    });
+
     const nextMessage = {
       id: `${activeMatchId}-${Date.now()}`,
       from: 'me',
-      text: draftMessage.trim(),
+      firstName: user?.firstName || '',
+      text: trimmedMessage,
       createdAt: new Date().toISOString(),
     };
 
@@ -101,6 +237,7 @@ export function MatchesPage() {
       ...prev,
       [activeMatchId]: [...(prev[activeMatchId] || []), nextMessage],
     }));
+
     setDraftMessage('');
   };
 
@@ -201,6 +338,11 @@ export function MatchesPage() {
                       <div className="space-y-3">
                         {activeMessages.map((message) => {
                           const isMine = message.from === 'me';
+                          const displayFirstName =
+                            message.firstName ||
+                            (isMine
+                              ? user?.firstName || 'You'
+                              : extractFirstName(formatName(activeMatch)) || 'User');
 
                           return (
                             <div
@@ -218,6 +360,14 @@ export function MatchesPage() {
                                     : 'border border-slate-200 bg-white text-slate-700'
                                 )}
                               >
+                                <p
+                                  className={cn(
+                                    'mb-1 text-[11px] font-semibold',
+                                    isMine ? 'text-white/90' : 'text-slate-500'
+                                  )}
+                                >
+                                  {displayFirstName}
+                                </p>
                                 <p className="whitespace-pre-wrap break-words">{message.text}</p>
                                 <p
                                   className={cn(

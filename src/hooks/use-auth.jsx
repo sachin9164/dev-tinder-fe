@@ -6,7 +6,7 @@ import {
 } from '../services/auth-service';
 import { getProfile } from '../services/user-service';
 import { parseApiError } from '../lib/api-client';
-import { connectSocket, disconnectSocket } from '../lib/socket-client';
+import { disconnectSocket } from '../lib/socket-client';
 
 const AuthContext = createContext(null);
 
@@ -39,18 +39,6 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     fetchProfile().finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    if (user?._id || user?.id) {
-      connectSocket({ userId: user._id || user.id });
-    } else {
-      disconnectSocket();
-    }
-
-    return () => {
-      disconnectSocket();
-    };
-  }, [user]);
 
   const value = useMemo(
     () => ({

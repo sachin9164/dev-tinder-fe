@@ -7,11 +7,18 @@ const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH || '/socket.io';
 let socket;
 
 export function getSocket() {
-  if (!socket) {
+  if ( location.hostname === 'localhost') {
     socket = io(SOCKET_URL, {
       autoConnect: false,
       withCredentials: true,
       path: SOCKET_PATH,
+      transports: ['websocket', 'polling'],
+    });
+  }else{
+    socket = io(SOCKET_URL, {
+      autoConnect: false,
+      withCredentials: true,
+      path: "/api/socket.io",
       transports: ['websocket', 'polling'],
     });
   }

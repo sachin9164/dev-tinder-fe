@@ -41,6 +41,8 @@ npm run dev
 - `VITE_API_BASE_URL` defaults to `http://localhost:3000`
 - `VITE_SOCKET_URL` defaults to `VITE_API_BASE_URL`
 - `VITE_SOCKET_PATH` defaults to `/socket.io`
+- `VITE_SOCKET_SEND_MESSAGE_EVENT` defaults to `chat:message:send`
+- `VITE_SOCKET_RECEIVE_MESSAGE_EVENT` defaults to `chat:receiveMessage`
 
 ## Features
 
