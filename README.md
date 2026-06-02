@@ -39,6 +39,8 @@ npm run dev
 ## Environment
 
 - `VITE_API_BASE_URL` defaults to `http://localhost:3000`
+- `VITE_SOCKET_URL` defaults to `VITE_API_BASE_URL`
+- `VITE_SOCKET_PATH` defaults to `/socket.io`
 
 ## Features
 

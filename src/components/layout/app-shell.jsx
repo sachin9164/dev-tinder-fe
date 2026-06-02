@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Flame, Heart, LogOut, User, Users } from 'lucide-react';
+import { BookOpenText, Flame, Heart, LogOut, User, Users } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Button } from '../ui/button';
@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 
 const navItems = [
   { to: '/discover', label: 'Discover', icon: Flame },
+  { to: '/blogs', label: 'Blogs', icon: BookOpenText },
   { to: '/requests', label: 'Requests', icon: Heart },
   { to: '/matches', label: 'Matches', icon: Users },
   { to: '/profile', label: 'Profile', icon: User },
@@ -65,7 +66,7 @@ export function AppShell() {
           </div>
         </header>
 
-        <nav className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-white/50 bg-white/70 p-2 shadow sm:grid-cols-4">
+        <nav className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-white/50 bg-white/70 p-2 shadow sm:grid-cols-5">
           {navItems.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}

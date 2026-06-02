@@ -3,6 +3,8 @@ import { AppShell } from './components/layout/app-shell';
 import { LoadingState } from './components/common/loading-state';
 import { useAuth } from './hooks/use-auth';
 import { AuthPage } from './pages/auth-page';
+import { BlogDetailPage } from './pages/blog-detail-page';
+import { BlogsPage } from './pages/blogs-page';
 import { DiscoverPage } from './pages/discover-page';
 import { MatchesPage } from './pages/matches-page';
 import { ProfilePage } from './pages/profile-page';
@@ -36,6 +38,8 @@ function App() {
         >
           <Route path="/" element={<Navigate to="/discover" replace />} />
           <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/blogs" element={<BlogsPage />} />
+          <Route path="/blogs/:id" element={<BlogDetailPage />} />
           <Route path="/requests" element={<RequestsPage />} />
           <Route path="/matches" element={<MatchesPage />} />
           <Route path="/profile" element={<ProfilePage />} />
